@@ -1,0 +1,1 @@
+# FullStack_Project1_WS_Django
