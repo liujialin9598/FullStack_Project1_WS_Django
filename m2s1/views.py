@@ -13,6 +13,7 @@ def index(request):
             "Risk aversion parameter in the income function ": "ρ",
             "Risk aversion parameter in the bequest function ": "γ",
             "Risk aversion scaling parameter for bequest": "K2",
+            "inflation-free retrun": "ifr",
             "Pension asset test minimum": "AT_min",
             "Pension asset test maximum": "AT_max",
             "Risk aversion additive parameter for income": "K1",
@@ -36,16 +37,14 @@ def default(request):
         {
             "γ": 0.4,
             "σinf": 0.03,
+            "ifr": 0.01,
             "α": 0.6,
             "AT_min": 301750,
-            "AT_max": 674000,
+            "AT_max": 656500,
             "K2": 2,
             "K1": 3,
             "Inf_Eq": 0.025,
             "RWG": 0.01,
-            "σport": 0.125,
-            "MRP": 0.04,
-            "RIR": 0.01,
             "Inft": 0.025,
             "Bt": 300000,
             "ρ": 0.7,
@@ -61,9 +60,6 @@ def result(request):
     α = float(request.GET.get("α"))
     Inf_Eq = float(request.GET.get("Inf_Eq"))
     RWG = float(request.GET.get("RWG"))
-    σport = float(request.GET.get("σport"))
-    MRP = float(request.GET.get("MRP"))
-    RIR = float(request.GET.get("RIR"))
     Inft = float(request.GET.get("Inft"))
     Bt = float(request.GET.get("Bt"))
     ρ = float(request.GET.get("ρ"))
@@ -73,6 +69,7 @@ def result(request):
     pen = float(request.GET.get("pen"))
     AT_min = float(request.GET.get("AT_min"))
     AT_max = float(request.GET.get("AT_max"))
+    ifr = float(request.GET.get("ifr"))
 
     life_expectancy_sheet = pd.read_excel("./Life Expectancy.xlsx")
 
@@ -113,16 +110,9 @@ def result(request):
             pass
 
         """
-        func5: r(t) = (inf(t) + RIR + MRP) + Z * σ(Port)
+        func5: r(t) = inf(t) +0.01
         """
-        RIR = sheet_simulation.loc[t, "RIR"] = RIR
-        MRP = sheet_simulation.loc[t, "MRP"] = MRP
-        
-        sheet_simulation.loc[t, "random"] = random.random()
-        Z = sheet_simulation.loc[t, "Z2"] = norm.ppf(random.random())
-        σPort = sheet_simulation.loc[t, "σ(Port)"] = σport
-
-        rt = sheet_simulation.loc[t, "r(t)"] = (inf + RIR + MRP) + Z * σPort
+        rt = sheet_simulation.loc[t, "r(t)"] = inf + ifr
 
         """
         func4: B(t) = B(t-1) * (1 - 1/(  LE(t-1)  ))*( 1 +  r(t)  )
@@ -158,7 +148,7 @@ def result(request):
             Loss_t = 0
 
         """
-        PR(t) = Max{Min[(Pen(t)-Loss(t)),Pen(t)],0}
+        PR(t) = Max{Min[Pen(t)-Loss(t),Pen(t)],0}
         """
         PR = sheet_simulation.loc[t, "PR(t)"] = max(min((pen - Loss_t), pen), 0)
 
