@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import render
 
 # Create your views here.
@@ -32,27 +33,9 @@ def index(request):
 
 
 def default(request):
-    return JsonResponse(
-        {
-            "γ": 0.4,
-            "σinf": 0.03,
-            "α": 0.6,
-            "AT_min": 301750,
-            "AT_max": 674000,
-            "K2": 2,
-            "K1": 3,
-            "Inf_Eq": 0.025,
-            "RWG": 0.01,
-            "σport": 0.125,
-            "MRP": 0.04,
-            "RIR": 0.01,
-            "Inft": 0.025,
-            "Bt": 300000,
-            "ρ": 0.7,
-            "Pt": 10000,
-            "pen": 29000,
-        }
-    )
+    with open("./jsonDefault.json", "r",encoding='utf-8') as file:
+        data = json.load(file)
+    return JsonResponse(data)
 
 
 def result(request):
@@ -117,7 +100,7 @@ def result(request):
         """
         RIR = sheet_simulation.loc[t, "RIR"] = RIR
         MRP = sheet_simulation.loc[t, "MRP"] = MRP
-        
+
         sheet_simulation.loc[t, "random"] = random.random()
         Z = sheet_simulation.loc[t, "Z2"] = norm.ppf(random.random())
         σPort = sheet_simulation.loc[t, "σ(Port)"] = σport
