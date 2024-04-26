@@ -3,14 +3,15 @@ from django.shortcuts import render
 # Create your views here.
 from django.http import JsonResponse
 import pandas as pd
-import random
 from scipy.stats import norm
 import numpy as np
+import json
 
 
 def index(request):
     return JsonResponse(
         {
+            "simulation times": "simulationtimes",
             "Risk aversion parameter in the income function ": "ρ",
             "Risk aversion parameter in the bequest function ": "γ",
             "Risk aversion scaling parameter for bequest": "K2",
@@ -30,36 +31,31 @@ def index(request):
             "annual pension payment": "pen",
             "simulation start age": "start_age",
             "simulation end age": "end_age",
-            "simulation times": "simulationtimes",
         }
     )
+
+
+def compare_and_update_json(new_data, file_path):
+    # 读取之前的JSON文件中的数据
+    with open(file_path, "r", encoding="utf-8") as file:
+        old_data = json.load(file)
+
+    # 比较新的JSON数据与之前的数据，找出差异，并更新之前的JSON数据
+    for key, value in new_data.items():
+        if key in old_data and old_data[key] != value:
+            old_data[key] = value
+
+    # 将更新后的JSON数据写入文件中
+    with open(file_path, "w", encoding="utf-8") as file:
+        json.dump(old_data, file, indent=4)
 
 
 def default(request):
-    return JsonResponse(
-        {
-            "γ": 0.4,
-            "σinf": 0.03,
-            "α": 0.6,
-            "AT_min": 301750,
-            "AT_max": 656500,
-            "K2": 2,
-            "K1": 3,
-            "Inf_Eq": 0.025,
-            "RWG": 0.01,
-            "σport": 0.15,
-            "MRP": 0.01,
-            "RIR": 0.01,
-            "Inft": 0.025,
-            "Bt": 300000,
-            "ρ": 0.7,
-            "Pt": 10000,
-            "pen": 29000,
-            "start_age": 67,
-            "end_age": 110,
-            "simulationtimes": 10,
-        }
-    )
+    with open("./jsonDefault.json", "r", encoding="utf-8") as file:
+        data = json.load(file)
+    if len(request.GET) > 0:
+        compare_and_update_json(request.GET.dict(), "./jsonDefault.json")
+    return JsonResponse(data)
 
 
 def result(request):
@@ -234,9 +230,9 @@ def result(request):
 
         # dead year
     condition = (sheet["W"].notna()) & (sheet["W"].shift(-1).isna())
-    
+
     final_sheet = sheet[condition]
-    final_sheet['W+Y']=final_sheet['W']+final_sheet['Y']
+    final_sheet["W+Y"] = final_sheet["W"] + final_sheet["Y"]
     json_data = final_sheet.to_json(orient="records")
 
     return JsonResponse(json_data, safe=False)

@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import render
 
 # Create your views here.
@@ -33,25 +34,10 @@ def index(request):
 
 
 def default(request):
-    return JsonResponse(
-        {
-            "γ": 0.4,
-            "σinf": 0.03,
-            "ifr": 0.01,
-            "α": 0.6,
-            "AT_min": 301750,
-            "AT_max": 656500,
-            "K2": 2,
-            "K1": 3,
-            "Inf_Eq": 0.025,
-            "RWG": 0.01,
-            "Inft": 0.025,
-            "Bt": 300000,
-            "ρ": 0.7,
-            "Pt": 10000,
-            "pen": 29000,
-        }
-    )
+    
+    with open("./jsonDefault.json", "r",encoding='utf-8') as file:
+        data = json.load(file)
+    return JsonResponse(data)
 
 
 def result(request):
