@@ -11,6 +11,7 @@ import numpy as np
 def index(request):
     return JsonResponse(
         {
+            "simulation times": "simulationtimes",
             "Risk aversion parameter in the income function ": "ρ",
             "Risk aversion parameter in the bequest function ": "γ",
             "Risk aversion scaling parameter for bequest": "K2",
@@ -30,7 +31,6 @@ def index(request):
             "annual pension payment": "pen",
             "simulation start age": "start_age",
             "simulation end age": "end_age",
-            "simulation times": "simulationtimes",
         }
     )
 
@@ -38,6 +38,7 @@ def index(request):
 def default(request):
     return JsonResponse(
         {
+            "simulationtimes": 1000,
             "γ": 0.4,
             "σinf": 0.03,
             "α": 0.6,
@@ -57,7 +58,6 @@ def default(request):
             "pen": 29000,
             "start_age": 67,
             "end_age": 110,
-            "simulationtimes": 10,
         }
     )
 
