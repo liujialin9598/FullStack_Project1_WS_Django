@@ -33,7 +33,7 @@ def index(request):
 
 
 def default(request):
-    with open("./jsonDefault.json", "r",encoding='utf-8') as file:
+    with open("./jsonDefault.json", "r", encoding="utf-8") as file:
         data = json.load(file)
     return JsonResponse(data)
 
@@ -66,7 +66,7 @@ def result(request):
         sheet_simulation.loc[t] = life_expectancy_sheet.loc[t]
 
         """
-        func7: Inf(t) = ( Inf_Eq + α(Inf(t-1) - Inf_Eq) ) + Z * σ(inf)
+        func7: Inf(t) = ( Inf_Eq + α(Inf(t-1) - Inf_Eq) ) + (0.5 * Z(t)+0.5 * Z(t-1) )* σ(inf) 
         """
         α = sheet_simulation.loc[t, "α"] = α
         σ = sheet_simulation.loc[t, "σ(inf)"] = σinf
@@ -78,8 +78,10 @@ def result(request):
             inf = sheet_simulation.loc[t, "inf"] = Inft
         else:
             inf = sheet_simulation.loc[t, "inf"] = (
-                Inf_Eq + α * (sheet_simulation.loc[t - 1, "inf"] - Inf_Eq)
-            ) + Z * σ
+                (Inf_Eq + α * (sheet_simulation.loc[t - 1, "inf"] - Inf_Eq))
+                + 0.5 * Z * σ
+                + 0.5 * sheet_simulation.loc[t - 1, "Z1"] * σ
+            )
 
         """
         func6: Pen(t) = Pen(t-1) * (1 + Inf(t-1) + RWG)

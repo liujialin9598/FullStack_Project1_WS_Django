@@ -230,3 +230,5 @@ def result(request):
     json_data = final_sheet.to_json(orient="records")
 
     return JsonResponse(json_data, safe=False)
+
+
