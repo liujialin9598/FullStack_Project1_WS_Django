@@ -51,11 +51,38 @@ def compare_and_update_json(new_data, file_path):
 
 
 def default(request):
+<<<<<<< HEAD
+    return JsonResponse(
+        {
+            "simulationtimes": 1000,
+            "γ": 0.4,
+            "σinf": 0.03,
+            "α": 0.6,
+            "AT_min": 301750,
+            "AT_max": 656500,
+            "K2": 2,
+            "K1": 3,
+            "Inf_Eq": 0.025,
+            "RWG": 0.01,
+            "σport": 0.15,
+            "MRP": 0.01,
+            "RIR": 0.01,
+            "Inft": 0.025,
+            "Bt": 300000,
+            "ρ": 0.7,
+            "Pt": 10000,
+            "pen": 29000,
+            "start_age": 67,
+            "end_age": 110,
+        }
+    )
+=======
     with open("./jsonDefault.json", "r", encoding="utf-8") as file:
         data = json.load(file)
     if len(request.GET) > 0:
         compare_and_update_json(request.GET.dict(), "./jsonDefault.json")
     return JsonResponse(data)
+>>>>>>> 63a24ee4ca771429944710565f95dbca73464e08
 
 
 def result(request):
