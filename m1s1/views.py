@@ -6,21 +6,24 @@ from django.http import JsonResponse
 import pandas as pd
 import random
 from scipy.stats import norm
+import ast
 
 
 def index(request):
     return JsonResponse(
         {
-            "Risk aversion parameter in the income function ": "ρ",
+            "Inflation weight": "Z_group",
+            "Inflation mean reversion parameter (Inf(t) > Inf_Eq)": "α1",
+            "Inflation mean reversion parameter (Inf(t) < Inf_Eq)": "α2",
+            "Standard deviation of annual inflation": "σinf",
+            "Equilibrium level of inflation ": "Inf_Eq",
+            "Risk aversion parameter in the income function": "ρ",
             "Risk aversion parameter in the bequest function ": "γ",
             "Risk aversion scaling parameter for bequest": "K2",
             "Pension asset test minimum": "AT_min",
             "Pension asset test maximum": "AT_max",
             "Risk aversion additive parameter for income": "K1",
             "consumer price inflation": "Inft",
-            "Standard deviation of annual inflation": "σinf",
-            "Inflation mean reversion parameter": "α",
-            "Equilibrium level of inflation ": "Inf_Eq",
             "Real Wage Growth": "RWG",
             "Standard deviation of annual return on members balance": "σport",
             "Market Risk Premium": "MRP",
@@ -39,9 +42,11 @@ def default(request):
 
 
 def result(request):
+    Z_group = ast.literal_eval(request.GET.get("Z_group"))
     γ = float(request.GET.get("γ"))
     σinf = float(request.GET.get("σinf"))
-    α = float(request.GET.get("α"))
+    α1 = float(request.GET.get("α1"))
+    α2 = float(request.GET.get("α2"))
     Inf_Eq = float(request.GET.get("Inf_Eq"))
     RWG = float(request.GET.get("RWG"))
     σport = float(request.GET.get("σport"))
@@ -68,7 +73,8 @@ def result(request):
         """
         func7: Inf(t) = ( Inf_Eq + α(Inf(t-1) - Inf_Eq) ) + (0.5 * Z(t)+0.5 * Z(t-1) )* σ(inf) 
         """
-        α = sheet_simulation.loc[t, "α"] = α
+        α1 = sheet_simulation.loc[t, "α1"] = α1
+        α2 = sheet_simulation.loc[t, "α2"] = α2
         σ = sheet_simulation.loc[t, "σ(inf)"] = σinf
         Inf_Eq = sheet_simulation.loc[t, "Inf_Eq"] = Inf_Eq
 
@@ -77,12 +83,26 @@ def result(request):
         if t == 0:
             inf = sheet_simulation.loc[t, "inf"] = Inft
         else:
-            inf = sheet_simulation.loc[t, "inf"] = (
-                (Inf_Eq + α * (sheet_simulation.loc[t - 1, "inf"] - Inf_Eq))
-                + 0.5 * Z * σ
-                + 0.5 * sheet_simulation.loc[t - 1, "Z1"] * σ
-            )
+            if inf > Inf_Eq:
+                inf = sheet_simulation.loc[t, "inf"] = Inf_Eq + α1 * (
+                    sheet_simulation.loc[t - 1, "inf"] - Inf_Eq
+                )
+            else:
+                inf = sheet_simulation.loc[t, "inf"] = Inf_Eq + α2 * (
+                    sheet_simulation.loc[t - 1, "inf"] - Inf_Eq
+                )
+            inf_Z = 0
+            weighted_Z = 0
+            for i in range(len(Z_group)):
+                if t - i < 0:
+                    inf_Z += Z_group[i] * norm.ppf(random.random()) * σ
+                else:
+                    weighted_Z = Z_group[i] * sheet_simulation.loc[t - i, "Z1"] * σ
+                    sheet_simulation.loc[t - i, "weighted_Z*σ"] = weighted_Z
+                    inf_Z += Z_group[i] * sheet_simulation.loc[t - i, "Z1"] * σ
 
+                sheet_simulation.loc[t, "sum_weighted_Z*σ"] = inf_Z
+            inf = sheet_simulation.loc[t, "inf"] = inf + inf_Z
         """
         func6: Pen(t) = Pen(t-1) * (1 + Inf(t-1) + RWG)
         """
