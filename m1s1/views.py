@@ -79,7 +79,7 @@ def result(request):
         else:
             inf = sheet_simulation.loc[t, "inf"] = (
                 (Inf_Eq + α * (sheet_simulation.loc[t - 1, "inf"] - Inf_Eq))
-                + 150 * Z * σ
+                + 0.5 * Z * σ
                 + 0.5 * sheet_simulation.loc[t - 1, "Z1"] * σ
             )
 
