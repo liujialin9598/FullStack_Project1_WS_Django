@@ -1,9 +1,9 @@
 import json
-from django.shortcuts import render
 
 # Create your views here.
 from django.http import JsonResponse
 import pandas as pd
+import numpy as np
 import random
 from scipy.stats import norm
 import ast
@@ -13,6 +13,7 @@ def index(request):
     return JsonResponse(
         {
             "Inflation weight": "Z_group",
+            "return related Inflation weight": "γ_group",
             "Inflation mean reversion parameter (Inf(t) > Inf_Eq)": "α1",
             "Inflation mean reversion parameter (Inf(t) < Inf_Eq)": "α2",
             "Standard deviation of annual inflation": "σinf",
@@ -23,7 +24,6 @@ def index(request):
             "Pension asset test minimum": "AT_min",
             "Pension asset test maximum": "AT_max",
             "Risk aversion additive parameter for income": "K1",
-            "consumer price inflation": "Inft",
             "Real Wage Growth": "RWG",
             "Standard deviation of annual return on members balance": "σport",
             "Market Risk Premium": "MRP",
@@ -43,6 +43,7 @@ def default(request):
 
 def result(request):
     Z_group = ast.literal_eval(request.GET.get("Z_group"))
+    γ_group = ast.literal_eval(request.GET.get("γ_group"))
     γ = float(request.GET.get("γ"))
     σinf = float(request.GET.get("σinf"))
     α1 = float(request.GET.get("α1"))
@@ -52,7 +53,6 @@ def result(request):
     σport = float(request.GET.get("σport"))
     MRP = float(request.GET.get("MRP"))
     RIR = float(request.GET.get("RIR"))
-    Inft = float(request.GET.get("Inft"))
     Bt = float(request.GET.get("Bt"))
     ρ = float(request.GET.get("ρ"))
     Pt = float(request.GET.get("Pt"))
@@ -61,162 +61,188 @@ def result(request):
     pen = float(request.GET.get("pen"))
     AT_min = float(request.GET.get("AT_min"))
     AT_max = float(request.GET.get("AT_max"))
+    start_age = 67
+    end_age = 110
+    simulationtimes = 1
 
+    # region 生成表格
     life_expectancy_sheet = pd.read_excel("./Life Expectancy.xlsx")
+    life_expectancy_sheet = life_expectancy_sheet[
+        life_expectancy_sheet["Age"].between(start_age, end_age)
+    ]
+    life_expectancy_sheet = pd.concat(
+        [
+            pd.DataFrame(
+                [[start_age - 3, 0, 0], [start_age - 2, 0, 0], [start_age - 1, 0, 0]],
+                columns=["Age", "LE_t (years)", "Prob_t"],
+            ),
+            life_expectancy_sheet,
+        ]
+    )
+    life_expectancy_sheet["index"] = range(-3, len(life_expectancy_sheet) - 3)
 
-    sheet_simulation = pd.DataFrame(columns=life_expectancy_sheet.columns.tolist())
-    W = 0
-    # start one simulation
-    for t in range(len(life_expectancy_sheet)):
-        sheet_simulation.loc[t] = life_expectancy_sheet.loc[t]
+    repeated_data = np.tile(
+        life_expectancy_sheet[["Age", "LE_t (years)", "Prob_t", "index"]],
+        (simulationtimes, 1),
+    )
 
-        """
-        func7: Inf(t) = ( Inf_Eq + α(Inf(t-1) - Inf_Eq) ) + (0.5 * Z(t)+0.5 * Z(t-1) )* σ(inf) 
-        """
-        α1 = sheet_simulation.loc[t, "α1"] = α1
-        α2 = sheet_simulation.loc[t, "α2"] = α2
-        σ = sheet_simulation.loc[t, "σ(inf)"] = σinf
-        Inf_Eq = sheet_simulation.loc[t, "Inf_Eq"] = Inf_Eq
+    sheet = pd.DataFrame(
+        repeated_data, columns=["Age", "LE_t (years)", "Prob_t", "index"]
+    )
+    # endregion
 
-        Z = sheet_simulation.loc[t, "Z1"] = norm.ppf(random.random())
+    sheet["livePossible"] = np.random.rand(
+        simulationtimes * (len(life_expectancy_sheet))
+    )
+    sheet["Z1"] = norm.ppf(
+        np.random.rand(simulationtimes * (len(life_expectancy_sheet)))
+    )
+    sheet["Z2"] = norm.ppf(
+        np.random.rand(simulationtimes * (len(life_expectancy_sheet)))
+    )
+    sheet["W(t)"] = norm.ppf(
+        np.random.rand(simulationtimes * (len(life_expectancy_sheet)))
+    )
 
-        if t == 0:
-            inf = sheet_simulation.loc[t, "inf"] = Inft
+    sheet.loc[sheet["Age"] < start_age, "Inf(t)"] = Inf_Eq
+
+    sheet["inf_Z"] = 0
+    for i in range(len(Z_group)):
+        sheet["inf_Z"] += Z_group[i] * sheet["Z1"].shift(i)
+
+    sheet["Pen(t)"] = np.nan
+    sheet["Loss(t)"] = np.nan
+    sheet["inf_r"] = np.nan
+    sheet["AT_min"] = np.nan
+    sheet["AT_max"] = np.nan
+    sheet["B(t)"] = np.nan
+    sheet["P(t)"] = np.nan
+
+    for i in range(start_age, end_age):
+        condition = sheet["Age"] == i
+        # func7: Inf(t) = ( Inf_Eq + α(Inf(t-1) - Inf_Eq) ) + inf_z * σ(inf)
+        # α 不同
+        sheet["α"] = np.where(
+            sheet["Inf(t)"] >= Inf_Eq,
+            α1,
+            α2,
+        )
+        sheet["Inf(t)"] = sheet["Inf(t)"].fillna(
+            Inf_Eq
+            + sheet["α"].shift(1) * (sheet["Inf(t)"].shift(1) - Inf_Eq)
+            + sheet["inf_Z"] * σinf
+        )
+
+        # func6: Pen(t) = Pen(t-1) * (1 + Inf(t-1) + RWG)
+        if i == start_age:
+            sheet.loc[condition, "Pen(t)"] = np.nan
+        elif i == start_age + 1:
+            sheet.loc[condition, "Pen(t)"] = pen * (1 + sheet["Inf(t)"].shift(1) + RWG)
         else:
-            if inf > Inf_Eq:
-                inf = sheet_simulation.loc[t, "inf"] = Inf_Eq + α1 * (
-                    sheet_simulation.loc[t - 1, "inf"] - Inf_Eq
-                )
-            else:
-                inf = sheet_simulation.loc[t, "inf"] = Inf_Eq + α2 * (
-                    sheet_simulation.loc[t - 1, "inf"] - Inf_Eq
-                )
-            inf_Z = 0
-            weighted_Z = 0
-            for i in range(len(Z_group)):
-                if t - i < 0:
-                    inf_Z += Z_group[i] * norm.ppf(random.random()) * σ
-                else:
-                    weighted_Z = Z_group[i] * sheet_simulation.loc[t - i, "Z1"] * σ
-                    sheet_simulation.loc[t - i, "weighted_Z*σ"] = weighted_Z
-                    inf_Z += Z_group[i] * sheet_simulation.loc[t - i, "Z1"] * σ
-
-                sheet_simulation.loc[t, "sum_weighted_Z*σ"] = inf_Z
-            inf = sheet_simulation.loc[t, "inf"] = inf + inf_Z
-        """
-        func6: Pen(t) = Pen(t-1) * (1 + Inf(t-1) + RWG)
-        """
-        RWG = sheet_simulation.loc[t, "RWG"] = RWG
-
-        if t > 1:
-            pen = sheet_simulation.loc[t, "Pen"] = sheet_simulation.loc[
-                t - 1, "Pen"
-            ] * (1 + sheet_simulation.loc[t - 1, "inf"] + RWG)
-        elif t == 1:
-            pen = sheet_simulation.loc[t, "Pen"] = pen
-        else:
-            pass
-
-        """
-        func5: r(t) = (inf(t) + RIR + MRP) + Z * σ(Port)
-        """
-        RIR = sheet_simulation.loc[t, "RIR"] = RIR
-        MRP = sheet_simulation.loc[t, "MRP"] = MRP
-
-        sheet_simulation.loc[t, "random"] = random.random()
-        Z = sheet_simulation.loc[t, "Z2"] = norm.ppf(random.random())
-        σPort = sheet_simulation.loc[t, "σ(Port)"] = σport
-
-        rt = sheet_simulation.loc[t, "r(t)"] = (inf + RIR + MRP) + Z * σPort
-
-        """
-        func4: B(t) = B(t-1) * (1 - 1/(  LE(t-1)  ))*( 1 +  r(t)  )
-        """
-        if t == 0:
-            B = sheet_simulation.loc[t, "B"] = Bt
-        else:
-            B = sheet_simulation.loc[t, "B"] = (
-                sheet_simulation.loc[t - 1, "B"]
-                * (1 - 1 / sheet_simulation.loc[t - 1, "LE_t (years)"])
-                * (1 + rt)
+            sheet["Pen(t)"] = sheet["Pen(t)"].fillna(
+                sheet["Pen(t)"].shift(1) * (1 + sheet["Inf(t)"].shift(1) + RWG)
             )
 
-        """
-        AT_min(t) = AT_min(t-1) (1 + inf(t-1) + RWG)
-        AT_max(t) = AT_max(t-1) (1 + inf(t-1) + RWG)
-        """
-        if t == 0:
-            AT_min = sheet_simulation.loc[t, "AT_min"] = AT_min
-            AT_max = sheet_simulation.loc[t, "AT_max"] = AT_max
+        # r(t) = ( γ0 * Inf(t) + γ1 * Inf (t-1) ) +RIR + MRP + W(t) * σPort
+        # W(t) is standard normal distribution
+        sheet.loc[condition, "inf_r"] = sheet["inf_r"].fillna(
+            sum(g * sheet["Inf(t)"].shift(i) for i, g in enumerate(γ_group))
+        )
+
+        sheet.loc[condition, "r(t)"] = (
+            sheet.loc[condition, "inf_r"] + RIR + MRP
+        ) + sheet.loc[condition, "W(t)"] * σport
+
+        # func4: B(t) = B(t-1) * (1 - 1/(  LE(t-1)  ))*( 1 +  r(t)  )
+        if i == start_age:
+            sheet.loc[condition, "B(t)"] = Bt
         else:
-            AT_min = sheet_simulation.loc[t, "AT_min"] = AT_min * (1 + inf + RWG)
-            AT_max = sheet_simulation.loc[t, "AT_max"] = AT_max * (1 + inf + RWG)
-
-        """
-        Loss(t)=(B(t)-AT_min) * (Pen(t) / (AT_max-AT_min))
-        """
-        if B > AT_min:
-            Loss_t = sheet_simulation.loc[t, "Loss(t)"] = (B - AT_min) * (
-                pen / (AT_max - AT_min)
-            )
-        else:
-            Loss_t = 0
-
-        """
-        PR(t) = Max{Min[(Pen(t)-Loss(t)),Pen(t)],0}
-        """
-        PR = sheet_simulation.loc[t, "PR(t)"] = max(min((pen - Loss_t), pen), 0)
-
-        """
-        func3: I(t) = B(t-1) / LE(t-1) + PR(t)
-        """
-        if t > 0:
-            I = sheet_simulation.loc[t, "I(t)"] = (
-                sheet_simulation.loc[t - 1, "B"]
-                / sheet_simulation.loc[t - 1, "LE_t (years)"]
-                + PR
+            sheet.loc[condition, "B(t)"] = sheet["B(t)"].fillna(
+                sheet["B(t)"].shift(1)
+                * (1 - 1 / sheet["LE_t (years)"].shift(1))
+                * (1 + sheet["r(t)"])
             )
 
-        """
-        func2: P(t) = P(t-1) * (1 + Inf(t))
-        """
-        if t == 0:
-            sheet_simulation.loc[t, "P"] = Pt
+        # AT_min(t) = AT_min(t-1) (1 + inf(t-1) + RWG)
+        # AT_max(t) = AT_max(t-1) (1 + inf(t-1) + RWG)
+        if i == start_age:
+            sheet.loc[condition, "AT_min"] = AT_min
+            sheet.loc[condition, "AT_max"] = AT_max
         else:
-            P = sheet_simulation.loc[t, "P"] = sheet_simulation.loc[t - 1, "P"] * (
-                1 + inf
+            sheet["AT_min"] = sheet["AT_min"].fillna(
+                sheet["AT_min"].shift(1) * (1 + sheet["Inf(t)"].shift(1) + RWG)
+            )
+            sheet["AT_max"] = sheet["AT_max"].fillna(
+                sheet["AT_max"].shift(1) * (1 + sheet["Inf(t)"].shift(1) + RWG)
             )
 
-        """
-        func1: w(t) =  ( I(t) / P(t) )** (1-ρ) / (1 - ρ)  -K1
-        """
-        ρ = sheet_simulation.loc[t, "ρ"] = ρ
+        # Loss(t)=(B(t)-AT_min) * (Pen(t) / (AT_max-AT_min))
+        sheet.loc[condition, "Loss(t)"] = (
+            sheet.loc[condition, "B(t)"] - sheet.loc[condition, "AT_min"]
+        ) * (
+            sheet.loc[condition, "Pen(t)"]
+            / (sheet.loc[condition, "AT_max"] - sheet.loc[condition, "AT_min"])
+        )
 
-        if t > 0:
-            w = sheet_simulation.loc[t, "w"] = ((I / P) ** (1 - ρ)) / (1 - ρ) - K1
+        # PR(t) = Max{Min[(Pen(t)-Loss(t)),Pen(t)],0}
+        sheet.loc[condition, "PR(t)"] = np.maximum(
+            np.minimum(
+                sheet.loc[condition, "Pen(t)"] - sheet.loc[condition, "Loss(t)"],
+                sheet.loc[condition, "Pen(t)"],
+            ),
+            0,
+        )
+
+        # func3: I(t) = B(t-1) / LE(t-1) + PR(t)
+        if i > start_age:
+            sheet["I(t)"] = sheet["I(t)"].fillna(
+                sheet["B(t)"].shift(1) / sheet["LE_t (years)"].shift(1) + sheet["PR(t)"]
+            )
+        else:
+            sheet.loc[condition, "I(t)"] = np.nan
+
+        # func2: P(t) = P(t-1) * (1 + Inf(t))
+        if i == start_age:
+            sheet.loc[condition, "P(t)"] = Pt
+        else:
+            sheet.loc[condition, "P(t)"] = sheet["P(t)"].fillna(
+                sheet["P(t)"].shift(1) * (1 + sheet["Inf(t)"])
+            )
+
+        # func1: w(t) =  ( I(t) / P(t) )** (1-ρ) / (1 - ρ)  -K1
+        if i > start_age:
+            sheet.loc[condition, "w"] = (
+                (sheet.loc[condition, "I(t)"] / sheet.loc[condition, "P(t)"]) ** (1 - ρ)
+            ) / (1 - ρ) - K1
+        else:
+            sheet.loc[condition, "w"] = 0
+            sheet.loc[condition, "W"] = 0
 
         # check passing
-        if t > 0:
-            W += w
-            sheet_simulation.loc[t, "W"] = W
-            if random.random() < life_expectancy_sheet.loc[t, "Prob_t"]:
-                # passing
-                """
-                func8: Y(T) = K2 * ( B(T) / P(T) )**(1 - γ) / (1 - γ)
-                """
-                γ = sheet_simulation.loc[t, "γ"] = γ
+        sheet.loc[condition, "aliveCode"] = np.where(
+            sheet.loc[condition, "Prob_t"] > sheet.loc[condition, "livePossible"],
+            np.nan,
+            1,
+        )
+        # 计算 大W
+        sheet["W"] = sheet["W"].fillna(
+            sheet["W"].shift(1) + sheet["w"] * sheet["aliveCode"]
+        )
 
-                Y = sheet_simulation.loc[t, "Y"] = (
-                    K2 * (B / P) ** (1 - γ) / (1 - γ)
-                )  # Bequest well-being in year T
-                W += Y
+        # func8: Y(T) = K2 * ( B(T) / P(T) )**(1 - γ) / (1 - γ)
+        sheet.loc[condition, "Y"] = (
+            K2
+            * (sheet.loc[condition, "B(t)"] / sheet.loc[condition, "P(t)"]) ** (1 - γ)
+            / (1 - γ)
+        )
 
-                sheet_simulation.loc[t, "W"] = W
-                break
+    sheet["I(t)/P"] = sheet["I(t)"] / sheet["P(t)"]
+    sheet["B/P"] = sheet["B(t)"] / sheet["P(t)"]
 
-    sheet_simulation["I(t)/P"] = sheet_simulation["I(t)"] / sheet_simulation["P"]
-    sheet_simulation["B/P"] = sheet_simulation["B"] / sheet_simulation["P"]
+    sheet.replace(0, np.nan, inplace=True)
+    sheet.loc[sheet["Loss(t)"] < 0, "Loss(t)"] = np.nan
+    sheet = sheet[sheet["Age"].between(start_age, end_age)]
 
-    json_data = sheet_simulation.to_json(orient="records")
+    json_data = sheet.to_json(orient="records")
 
     return JsonResponse(json_data, safe=False)
