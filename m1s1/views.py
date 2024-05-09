@@ -238,6 +238,7 @@ def result(request):
 
     sheet["I(t)/P"] = sheet["I(t)"] / sheet["P(t)"]
     sheet["B/P"] = sheet["B(t)"] / sheet["P(t)"]
+    sheet.loc[sheet['W'].isnull(), sheet.columns.difference(['Age'])] = np.nan
 
     sheet.replace(0, np.nan, inplace=True)
     sheet.loc[sheet["Loss(t)"] < 0, "Loss(t)"] = np.nan
