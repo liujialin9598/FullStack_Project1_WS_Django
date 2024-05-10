@@ -22,5 +22,6 @@ urlpatterns = [
     path("m2s1/", include("m2s1.urls")),
     path("m2s2/", include("m2s2.urls")),
     path("sone/", include("SimulationOne.urls")),
+    path("stwo/", include("SimulationTwo.urls")),
     path("admin/", admin.site.urls),
 ]
